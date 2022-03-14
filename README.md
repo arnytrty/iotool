@@ -1,7 +1,7 @@
 # IOTool
 Use RP2040/Raspberry Pi Pico as logic analyzer with Sigrok.
 
-> This is my graduation project, I will try to add documentation later when I finish the work.
+> This is my graduation project, I will try to add documentation later when I finish it.
 
 # Installing
 * In this repo you can find sketch you can upload to rp2040. To compile it you need [pico-sdk](https://github.com/raspberrypi/pico-sdk).
