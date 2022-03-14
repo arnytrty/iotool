@@ -1,0 +1,513 @@
+diff --git a/src/hardware/iotool/api.c b/src/hardware/iotool/api.c
+index 9839122d..7b1d64a4 100644
+--- a/src/hardware/iotool/api.c
++++ b/src/hardware/iotool/api.c
+@@ -20,122 +20,165 @@
+ #include <config.h>
+ #include "protocol.h"
+ 
+-static struct sr_dev_driver iotool_driver_info;
++#define SERIALCOMM "115200/8n1"
+ 
+-static GSList *scan(struct sr_dev_driver *di, GSList *options)
+-{
+-	struct drv_context *drvc;
+-	GSList *devices;
++static const uint32_t scanopts[] = {
++	SR_CONF_CONN,
++};
+ 
+-	(void)options;
++static const uint32_t drvopts[] = {
++	SR_CONF_LOGIC_ANALYZER,
++};
+ 
+-	devices = NULL;
+-	drvc = di->context;
+-	drvc->instances = NULL;
++static const uint32_t devopts[] = {
++	SR_CONF_CONTINUOUS,
++	SR_CONF_SAMPLERATE | SR_CONF_GET | SR_CONF_SET | SR_CONF_LIST,
++};
+ 
+-	/* TODO: scan for devices, either based on a SR_CONF_CONN option
+-	 * or on a USB scan. */
++static const uint64_t samplerates[] = {
++	SR_KHZ(5),
++	SR_KHZ(10),
++	SR_KHZ(60),
++	SR_KHZ(125),
++	SR_KHZ(250),
++	SR_KHZ(500),
++	SR_MHZ(1),
++};
+ 
+-	return devices;
+-}
++static struct sr_dev_driver iotool_driver_info;
+ 
+-static int dev_open(struct sr_dev_inst *sdi)
++static GSList *scan(struct sr_dev_driver *di, GSList *options)
+ {
+-	(void)sdi;
++	struct sr_config *src;
++	struct sr_dev_inst *sdi;
++	struct sr_serial_dev_inst *serial;
++	GSList *l;
++	const char *conn;
++
++	conn = NULL;
++	for(l = options; l; l = l->next) {
++		src = l->data;
++		switch (src->key) {
++		case SR_CONF_CONN:
++			conn = g_variant_get_string(src->data, NULL);
++			break;
++		}
++	}
+ 
+-	/* TODO: get handle from sdi->conn and open it. */
++	if(!conn)
++		return NULL;
+ 
+-	return SR_OK;
+-}
++	serial = sr_serial_dev_inst_new(conn, SERIALCOMM);
+ 
+-static int dev_close(struct sr_dev_inst *sdi)
+-{
+-	(void)sdi;
++	if(serial_open(serial, SERIAL_RDWR) != SR_OK)
++		return NULL;
++
++	sdi = NULL;
++	if(iotool_get(serial, &sdi) != SR_OK) {
++		serial_close(serial);
++		return NULL;
++	}
+ 
+-	/* TODO: get handle from sdi->conn and close it. */
++	serial_close(serial);
+ 
+-	return SR_OK;
++	return std_scan_complete(di, g_slist_append(NULL, sdi));
+ }
+ 
+ static int config_get(uint32_t key, GVariant **data,
+ 	const struct sr_dev_inst *sdi, const struct sr_channel_group *cg)
+ {
+-	int ret;
++	struct dev_context *devc;
+ 
+-	(void)sdi;
+-	(void)data;
+ 	(void)cg;
+ 
+-	ret = SR_OK;
++	if (!sdi)
++		return SR_ERR_ARG;
++
++	devc = sdi->priv;
++
+ 	switch (key) {
+-	/* TODO */
++	case SR_CONF_SAMPLERATE:
++		*data = g_variant_new_uint64(devc->cur_samplerate);
++		break;
+ 	default:
+ 		return SR_ERR_NA;
+ 	}
+ 
+-	return ret;
++	return SR_OK;
+ }
+ 
+ static int config_set(uint32_t key, GVariant *data,
+ 	const struct sr_dev_inst *sdi, const struct sr_channel_group *cg)
+ {
+-	int ret;
+-
+-	(void)sdi;
+-	(void)data;
++	struct dev_context *devc;
++	
+ 	(void)cg;
+ 
+-	ret = SR_OK;
++	if (!sdi)
++		return SR_ERR_ARG;
++
++	devc = sdi->priv;
++
+ 	switch (key) {
+-	/* TODO */
++	case SR_CONF_SAMPLERATE:
++		devc->cur_samplerate = g_variant_get_uint64(data);
++		break;
+ 	default:
+-		ret = SR_ERR_NA;
++		return SR_ERR_NA;
+ 	}
+ 
+-	return ret;
++	return SR_OK;
+ }
+ 
+ static int config_list(uint32_t key, GVariant **data,
+ 	const struct sr_dev_inst *sdi, const struct sr_channel_group *cg)
+ {
+-	int ret;
+-
+-	(void)sdi;
+-	(void)data;
+-	(void)cg;
+-
+-	ret = SR_OK;
+ 	switch (key) {
+-	/* TODO */
++	case SR_CONF_SCAN_OPTIONS:
++	case SR_CONF_DEVICE_OPTIONS:
++		return STD_CONFIG_LIST(key, data, sdi, cg, scanopts, drvopts, devopts);
++	case SR_CONF_SAMPLERATE:
++		*data = std_gvar_samplerates(ARRAY_AND_SIZE(samplerates));
++		break;
+ 	default:
+ 		return SR_ERR_NA;
+ 	}
+ 
+-	return ret;
++	return SR_OK;
+ }
+ 
+ static int dev_acquisition_start(const struct sr_dev_inst *sdi)
+ {
+-	/* TODO: configure hardware, reset acquisition state, set up
+-	 * callbacks and send header packet. */
++	struct sr_serial_dev_inst *serial;
++	struct dev_context *devc;
+ 
+-	(void)sdi;
++	serial = sdi->conn;
++	devc = sdi->priv;
+ 
+-	return SR_OK;
++	iotool_start(serial, devc->cur_samplerate, devc->mode);
++
++	std_session_send_df_header(sdi);
++
++	return serial_source_add(sdi->session, serial, G_IO_IN, 50, iotool_receive_data,
++		(struct sr_dev_inst *)sdi);
+ }
+ 
+ static int dev_acquisition_stop(struct sr_dev_inst *sdi)
+ {
+-	/* TODO: stop acquisition. */
++	struct sr_serial_dev_inst *serial;
++
++	serial = sdi->conn;
+ 
+-	(void)sdi;
++	iotool_stop(serial);
++	serial_source_remove(sdi->session, serial);
++	std_session_send_df_end(sdi);
+ 
+ 	return SR_OK;
+ }
+ 
+ static struct sr_dev_driver iotool_driver_info = {
+ 	.name = "iotool",
+-	.longname = "iotool",
++	.longname = "IOTool",
+ 	.api_version = 1,
+ 	.init = std_init,
+ 	.cleanup = std_cleanup,
+@@ -145,8 +188,8 @@ static struct sr_dev_driver iotool_driver_info = {
+ 	.config_get = config_get,
+ 	.config_set = config_set,
+ 	.config_list = config_list,
+-	.dev_open = dev_open,
+-	.dev_close = dev_close,
++	.dev_open = std_serial_dev_open,
++	.dev_close = std_serial_dev_close,
+ 	.dev_acquisition_start = dev_acquisition_start,
+ 	.dev_acquisition_stop = dev_acquisition_stop,
+ 	.context = NULL,
+diff --git a/src/hardware/iotool/protocol.c b/src/hardware/iotool/protocol.c
+index bda786bb..c09dff9b 100644
+--- a/src/hardware/iotool/protocol.c
++++ b/src/hardware/iotool/protocol.c
+@@ -22,20 +22,248 @@
+ 
+ SR_PRIV int iotool_receive_data(int fd, int revents, void *cb_data)
+ {
+-	const struct sr_dev_inst *sdi;
++	int datalen, i;
++	char *buf;
++	struct sr_dev_inst *sdi;
+ 	struct dev_context *devc;
++	struct sr_serial_dev_inst *serial;
++	struct sr_datafeed_packet packet;
++	struct sr_datafeed_logic logic;
+ 
+ 	(void)fd;
+ 
+-	if (!(sdi = cb_data))
+-		return TRUE;
++	sdi = cb_data;
++	serial = sdi->conn;
++	devc = sdi->priv;
+ 
+-	if (!(devc = sdi->priv))
+-		return TRUE;
++	if(revents == G_IO_IN) {
++		datalen = serial_has_receive_data(serial);
++
++		if(datalen != 0) {
++			switch (devc->mode ? devc->cur_samplerate | 0x8000000000000000 : devc->cur_samplerate) {
++				case SR_MHZ(1):
++					// 1ch
++					buf = g_malloc0(datalen * 16);
++
++					serial_read_nonblocking(serial, buf, datalen);
++
++					for (i = datalen; i > 0; i--) {
++						buf[i * 16 - 1] = 0x00;
++						buf[i * 16 - 2] = buf[i - 1] & 0x01;
++						buf[i * 16 - 3] = 0x00;
++						buf[i * 16 - 4] = buf[i - 1] >> 1 & 0x01;
++						buf[i * 16 - 5] = 0x00;
++						buf[i * 16 - 6] = buf[i - 1] >> 2 & 0x01;
++						buf[i * 16 - 7] = 0x00;
++						buf[i * 16 - 8] = buf[i - 1] >> 3 & 0x01;
++						buf[i * 16 - 9] = 0x00;
++						buf[i * 16 - 10] = buf[i - 1] >> 4 & 0x01;
++						buf[i * 16 - 11] = 0x00;
++						buf[i * 16 - 12] = buf[i - 1] >> 5 & 0x01;
++						buf[i * 16 - 13] = 0x00;
++						buf[i * 16 - 14] = buf[i - 1] >> 6 & 0x01;
++						buf[i * 16 - 15] = 0x00;
++						buf[i * 16 - 16] = buf[i - 1] >> 7 & 0x01;
++					}
++
++					packet.type = SR_DF_LOGIC;
++					packet.payload = &logic;
++
++					logic.length = datalen * 16;
++					logic.unitsize = 2;
++					logic.data = buf;
++
++					sr_session_send(sdi, &packet);
++					break;
++
++				case SR_KHZ(500):
++					// 2ch
++					buf = g_malloc0(datalen * 8);
++
++					serial_read_nonblocking(serial, buf, datalen);
++
++					for (i = datalen; i > 0; i--) {
++						buf[i * 8 - 1] = 0x00;
++						buf[i * 8 - 2] = buf[i - 1] & 0x03;
++						buf[i * 8 - 3] = 0x00;
++						buf[i * 8 - 4] = buf[i - 1] >> 2 & 0x03;
++						buf[i * 8 - 5] = 0x00;
++						buf[i * 8 - 6] = buf[i - 1] >> 4 & 0x03;
++						buf[i * 8 - 7] = 0x00;
++						buf[i * 8 - 8] = buf[i - 1] >> 6 & 0x03;
++					}
++
++					packet.type = SR_DF_LOGIC;
++					packet.payload = &logic;
++
++					logic.length = datalen * 8;
++					logic.unitsize = 2;
++					logic.data = buf;
++
++					sr_session_send(sdi, &packet);
++					break;
++
++				case SR_MHZ(1) | 0x8000000000000000:
++				case SR_KHZ(250):
++					// 4ch
++					buf = g_malloc0(datalen * 4);
++
++					serial_read_nonblocking(serial, buf, datalen);
++
++					for (i = datalen; i > 0; i--) {
++						buf[i * 4 - 1] = 0x00;
++						buf[i * 4 - 2] = buf[i - 1] & 0x0F;
++						buf[i * 4 - 3] = 0x00;
++						buf[i * 4 - 4] = buf[i - 1] >> 4 & 0x0F;
++					}
++
++					packet.type = SR_DF_LOGIC;
++					packet.payload = &logic;
++
++					logic.length = datalen * 4;
++					logic.unitsize = 2;
++					logic.data = buf;
++
++					sr_session_send(sdi, &packet);
++					break;
++
++				case SR_KHZ(500) | 0x8000000000000000:
++				case SR_KHZ(125):
++					// 8ch
++					buf = g_malloc0(datalen * 2);
++
++					serial_read_nonblocking(serial, buf, datalen);
++
++					for (i = datalen; i > 0; i--) {
++						buf[i * 2 - 2] = buf[i - 1];
++						buf[i * 2 - 1] = 0x00;
++					}
++
++					packet.type = SR_DF_LOGIC;
++					packet.payload = &logic;
++
++					logic.length = datalen * 2;
++					logic.unitsize = 2;
++					logic.data = buf;
++
++					sr_session_send(sdi, &packet);
++					break;
++
++				default:
++					// 16ch
++					datalen -= datalen % 2;
++
++					buf = g_malloc0(datalen);
++
++					serial_read_nonblocking(serial, buf, datalen);
++
++					packet.type = SR_DF_LOGIC;
++					packet.payload = &logic;
++
++					logic.length = datalen;
++					logic.unitsize = 2;
++					logic.data = buf;
++
++					sr_session_send(sdi, &packet);
++			}
++		}
+ 
+-	if (revents == G_IO_IN) {
+-		/* TODO */
+ 	}
+ 
+ 	return TRUE;
+ }
++
++SR_PRIV int iotool_get(struct sr_serial_dev_inst *serial, struct sr_dev_inst **sdi)
++{
++	struct dev_context *devc;
++	char buf[10];
++	uint8_t i;
++
++	buf[0] = 'I';
++	if(serial_write_blocking(serial, buf, 1, serial_timeout(serial, 1)) != 1)
++		return SR_ERR;
++
++	g_usleep(5000);
++
++	if(serial_has_receive_data(serial) == 0)
++		return SR_ERR;
++
++	if(serial_read_blocking(serial, buf, 10, serial_timeout(serial, 10)) < 0)
++		return SR_ERR;
++
++	if(strncmp(buf, "IAMIOTOOL", 9))
++		return SR_ERR;
++
++	devc = g_malloc0(sizeof(struct dev_context));
++	devc->cur_samplerate = SR_KHZ(250);
++	devc->mode = buf[9] == '1';
++
++	*sdi = g_malloc0(sizeof(struct sr_dev_inst));
++	(*sdi)->status = SR_ST_INACTIVE;
++	(*sdi)->inst_type = SR_INST_SERIAL;
++	(*sdi)->model = g_strdup("IOTool");
++	(*sdi)->version = g_strdup("v1.0");
++	(*sdi)->conn = serial;
++	(*sdi)->priv = devc;
++
++	for(i = 0; i < 16; i++) {
++		snprintf(buf, 8, "CH%i", i + 1);
++		sr_channel_new(*sdi, i, SR_CHANNEL_LOGIC, TRUE, buf);
++	}
++
++	return SR_OK;
++}
++
++SR_PRIV int iotool_start(struct sr_serial_dev_inst *serial, uint64_t samplerate, uint8_t mode)
++{
++	char buf[1];
++
++	switch (samplerate) {
++		case SR_MHZ(1):
++			buf[0] = mode ? 'X' : 'A';
++			break;
++
++		case SR_KHZ(500):
++			buf[0] = mode ? 'Y' : 'B';
++			break;
++
++		case SR_KHZ(250):
++			buf[0] = mode ? 'Z' : 'C';
++			break;
++
++		case SR_KHZ(125):
++			buf[0] = 'D';
++			break;
++
++		case SR_KHZ(60):
++			buf[0] = 'E';
++			break;
++
++		case SR_KHZ(10):
++			buf[0] = 'F';
++			break;
++
++		case SR_KHZ(5):
++			buf[0] = 'G';
++			break;
++
++		default:
++			return SR_ERR_ARG;
++	}
++
++	if(serial_write_blocking(serial, buf, 5, serial_timeout(serial, 5)) != 1)
++		return SR_ERR;
++
++	return SR_OK;
++}
++
++SR_PRIV int iotool_stop(struct sr_serial_dev_inst *serial)
++{
++	char buf[1];
++
++	buf[0] = 'S';
++	if(serial_write_blocking(serial, buf, 1, serial_timeout(serial, 1)) != 1)
++		return SR_ERR;
++
++	return SR_OK;
++}
+diff --git a/src/hardware/iotool/protocol.h b/src/hardware/iotool/protocol.h
+index a546cb7c..e219f2f6 100644
+--- a/src/hardware/iotool/protocol.h
++++ b/src/hardware/iotool/protocol.h
+@@ -28,8 +28,14 @@
+ #define LOG_PREFIX "iotool"
+ 
+ struct dev_context {
++    uint64_t cur_samplerate;
++    uint8_t mode;
+ };
+ 
+ SR_PRIV int iotool_receive_data(int fd, int revents, void *cb_data);
+ 
++SR_PRIV int iotool_get(struct sr_serial_dev_inst *serial, struct sr_dev_inst **sdi);
++SR_PRIV int iotool_start(struct sr_serial_dev_inst *serial, uint64_t samplerate, uint8_t mode);
++SR_PRIV int iotool_stop(struct sr_serial_dev_inst *serial);
++
+ #endif

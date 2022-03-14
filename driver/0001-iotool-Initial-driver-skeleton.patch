@@ -1,0 +1,296 @@
+From 85a251e6f2dfac6197bae63737c4c276dbcac30f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Arno=C5=A1t=20Trt=C3=BA=C5=A1ek?= <arnytrty@seznam.cz>
+Date: Fri, 31 Dec 2021 10:23:27 +0100
+Subject: [PATCH] iotool: Initial driver skeleton.
+
+---
+ Makefile.am                    |   6 ++
+ configure.ac                   |   1 +
+ src/hardware/iotool/api.c      | 154 +++++++++++++++++++++++++++++++++
+ src/hardware/iotool/protocol.c |  41 +++++++++
+ src/hardware/iotool/protocol.h |  35 ++++++++
+ 5 files changed, 237 insertions(+)
+ create mode 100644 src/hardware/iotool/api.c
+ create mode 100644 src/hardware/iotool/protocol.c
+ create mode 100644 src/hardware/iotool/protocol.h
+
+diff --git a/Makefile.am b/Makefile.am
+index 280cf64..a27f493 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -429,6 +429,12 @@ src_libdrivers_la_SOURCES += \
+ 	src/hardware/ikalogic-scanaplus/protocol.c \
+ 	src/hardware/ikalogic-scanaplus/api.c
+ endif
++if HW_IOTOOL
++src_libdrivers_la_SOURCES += \
++	src/hardware/iotool/protocol.h \
++	src/hardware/iotool/protocol.c \
++	src/hardware/iotool/api.c
++endif
+ if HW_IPDBG_LA
+ src_libdrivers_la_SOURCES += \
+ 	src/hardware/ipdbg-la/protocol.h \
+diff --git a/configure.ac b/configure.ac
+index 424b000..05f823a 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -323,6 +323,7 @@ SR_DRIVER([hp-59306a], [hp-59306a])
+ SR_DRIVER([Hung-Chang DSO-2100], [hung-chang-dso-2100], [libieee1284])
+ SR_DRIVER([Ikalogic Scanalogic-2], [ikalogic-scanalogic2], [libusb])
+ SR_DRIVER([Ikalogic Scanaplus], [ikalogic-scanaplus], [libftdi])
++SR_DRIVER([iotool], [iotool])
+ SR_DRIVER([IPDBG LA], [ipdbg-la])
+ SR_DRIVER([ITECH IT8500], [itech-it8500], [serial_comm])
+ SR_DRIVER([Kecheng KC-330B], [kecheng-kc-330b], [libusb])
+diff --git a/src/hardware/iotool/api.c b/src/hardware/iotool/api.c
+new file mode 100644
+index 0000000..9839122
+--- /dev/null
++++ b/src/hardware/iotool/api.c
+@@ -0,0 +1,154 @@
++/*
++ * This file is part of the libsigrok project.
++ *
++ * Copyright (C) 2021 Arnošt Trtúšek <arnytrty@seznam.cz>
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 3 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#include <config.h>
++#include "protocol.h"
++
++static struct sr_dev_driver iotool_driver_info;
++
++static GSList *scan(struct sr_dev_driver *di, GSList *options)
++{
++	struct drv_context *drvc;
++	GSList *devices;
++
++	(void)options;
++
++	devices = NULL;
++	drvc = di->context;
++	drvc->instances = NULL;
++
++	/* TODO: scan for devices, either based on a SR_CONF_CONN option
++	 * or on a USB scan. */
++
++	return devices;
++}
++
++static int dev_open(struct sr_dev_inst *sdi)
++{
++	(void)sdi;
++
++	/* TODO: get handle from sdi->conn and open it. */
++
++	return SR_OK;
++}
++
++static int dev_close(struct sr_dev_inst *sdi)
++{
++	(void)sdi;
++
++	/* TODO: get handle from sdi->conn and close it. */
++
++	return SR_OK;
++}
++
++static int config_get(uint32_t key, GVariant **data,
++	const struct sr_dev_inst *sdi, const struct sr_channel_group *cg)
++{
++	int ret;
++
++	(void)sdi;
++	(void)data;
++	(void)cg;
++
++	ret = SR_OK;
++	switch (key) {
++	/* TODO */
++	default:
++		return SR_ERR_NA;
++	}
++
++	return ret;
++}
++
++static int config_set(uint32_t key, GVariant *data,
++	const struct sr_dev_inst *sdi, const struct sr_channel_group *cg)
++{
++	int ret;
++
++	(void)sdi;
++	(void)data;
++	(void)cg;
++
++	ret = SR_OK;
++	switch (key) {
++	/* TODO */
++	default:
++		ret = SR_ERR_NA;
++	}
++
++	return ret;
++}
++
++static int config_list(uint32_t key, GVariant **data,
++	const struct sr_dev_inst *sdi, const struct sr_channel_group *cg)
++{
++	int ret;
++
++	(void)sdi;
++	(void)data;
++	(void)cg;
++
++	ret = SR_OK;
++	switch (key) {
++	/* TODO */
++	default:
++		return SR_ERR_NA;
++	}
++
++	return ret;
++}
++
++static int dev_acquisition_start(const struct sr_dev_inst *sdi)
++{
++	/* TODO: configure hardware, reset acquisition state, set up
++	 * callbacks and send header packet. */
++
++	(void)sdi;
++
++	return SR_OK;
++}
++
++static int dev_acquisition_stop(struct sr_dev_inst *sdi)
++{
++	/* TODO: stop acquisition. */
++
++	(void)sdi;
++
++	return SR_OK;
++}
++
++static struct sr_dev_driver iotool_driver_info = {
++	.name = "iotool",
++	.longname = "iotool",
++	.api_version = 1,
++	.init = std_init,
++	.cleanup = std_cleanup,
++	.scan = scan,
++	.dev_list = std_dev_list,
++	.dev_clear = std_dev_clear,
++	.config_get = config_get,
++	.config_set = config_set,
++	.config_list = config_list,
++	.dev_open = dev_open,
++	.dev_close = dev_close,
++	.dev_acquisition_start = dev_acquisition_start,
++	.dev_acquisition_stop = dev_acquisition_stop,
++	.context = NULL,
++};
++SR_REGISTER_DEV_DRIVER(iotool_driver_info);
+diff --git a/src/hardware/iotool/protocol.c b/src/hardware/iotool/protocol.c
+new file mode 100644
+index 0000000..bda786b
+--- /dev/null
++++ b/src/hardware/iotool/protocol.c
+@@ -0,0 +1,41 @@
++/*
++ * This file is part of the libsigrok project.
++ *
++ * Copyright (C) 2021 Arnošt Trtúšek <arnytrty@seznam.cz>
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 3 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#include <config.h>
++#include "protocol.h"
++
++SR_PRIV int iotool_receive_data(int fd, int revents, void *cb_data)
++{
++	const struct sr_dev_inst *sdi;
++	struct dev_context *devc;
++
++	(void)fd;
++
++	if (!(sdi = cb_data))
++		return TRUE;
++
++	if (!(devc = sdi->priv))
++		return TRUE;
++
++	if (revents == G_IO_IN) {
++		/* TODO */
++	}
++
++	return TRUE;
++}
+diff --git a/src/hardware/iotool/protocol.h b/src/hardware/iotool/protocol.h
+new file mode 100644
+index 0000000..a546cb7
+--- /dev/null
++++ b/src/hardware/iotool/protocol.h
+@@ -0,0 +1,35 @@
++/*
++ * This file is part of the libsigrok project.
++ *
++ * Copyright (C) 2021 Arnošt Trtúšek <arnytrty@seznam.cz>
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 3 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#ifndef LIBSIGROK_HARDWARE_IOTOOL_PROTOCOL_H
++#define LIBSIGROK_HARDWARE_IOTOOL_PROTOCOL_H
++
++#include <stdint.h>
++#include <glib.h>
++#include <libsigrok/libsigrok.h>
++#include "libsigrok-internal.h"
++
++#define LOG_PREFIX "iotool"
++
++struct dev_context {
++};
++
++SR_PRIV int iotool_receive_data(int fd, int revents, void *cb_data);
++
++#endif
+-- 
+2.30.2
+
