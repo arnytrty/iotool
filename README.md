@@ -12,3 +12,5 @@ Use RP2040/Raspberry Pi Pico as logic analyzer with Sigrok.
 # Issues
 * Some samples are lost, idk where
 * Sigrok driver is not ideal
+* Pico code can be more optimized
+* Overall this whole thing is crap but it works somehow
